@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<terp>
+<data>
+
+<record model="ir.sequence.type" id="seq_type_res_partner">
+    <field name="name">Product code</field>
+    <field name="code">product.product</field>
+</record>
+<record model="ir.sequence" id="seq_res_partner">
+    <field name="name">Product code</field>
+    <field name="code">product.product</field>
+    <field name="prefix">25</field>
+    <field name="padding">5</field>
+</record>
+
+</data>
+</terp>

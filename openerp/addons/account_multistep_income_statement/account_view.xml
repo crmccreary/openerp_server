@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<openerp>
+    <data>
+
+        <!--
+    Account Types
+    -->
+        <record id="view_account_type_income_form" model="ir.ui.view">
+            <field name="name">account.account.type.income.form</field>
+            <field name="model">account.account.type</field>
+            <field name="type">form</field>
+            <field name="inherit_id" ref="account.view_account_type_form" />
+            <field name="arch" type="xml">
+                <field name="report_type" select="2" position="after">
+                    <field name="pl_income_type" attrs="{'invisible':[('report_type','not in',['income','expense'])], 'required':[('report_type','in',['income','expense'])]}" />
+                </field>
+            </field>
+        </record>
+
+    </data>
+</openerp>
