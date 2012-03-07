@@ -22,10 +22,40 @@
 import time
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+import pytz
+import logging
 
 from osv import fields, osv
 from tools.translate import _
+import tools
 import netsvc
+
+_logger = logging.getLogger(__name__)
+
+def context_now(context):
+    """Returns the current date as seen in the client's timezone
+       in a format fit for date fields.
+       This method may be passed as value to initialize _defaults.
+
+       :param dict context: the 'tz' key in the context should give the
+                            name of the User/Client timezone (otherwise
+                            UTC is used)
+       :rtype: datetime
+        """
+    now = datetime.now()
+    context_now = None
+    if context and context.get('tz'):
+        try:
+            utc = pytz.timezone('UTC')
+            context_tz = pytz.timezone(context['tz'])
+            utc_now = utc.localize(now, is_dst=False) # UTC = no DST
+            context_now = utc_now.astimezone(context_tz)
+        except Exception:
+            _logger.debug("failed to compute context/client-specific today date, "
+                          "using the UTC value for `today`",
+                          exc_info=True)
+    return context_now or now
+
 
 class one2many_mod2(fields.one2many):
     def get(self, cr, obj, ids, name, user=None, offset=0, context=None, values=None):
@@ -129,7 +159,7 @@ class hr_timesheet_sheet(osv.osv):
             total_attendance = {}
             for attendance in [att for att in attendances
                                if att.action in ('sign_in', 'sign_out')]:
-                day = attendance.name[:10]
+                day = fields.date.context_today(self, cr, uid, context=context)
                 if not total_attendance.get(day, False):
                     total_attendance[day] = timedelta(seconds=0)
 
@@ -147,7 +177,7 @@ class hr_timesheet_sheet(osv.osv):
                 # for a past date, and the time to now for the current date
                 if total_attendance[day] < timedelta(0):
                     if day == date_current:
-                        now = datetime.now()
+                        now = context_now(context)
                         total_attendance[day] += timedelta(hours=now.hour,
                                                            minutes=now.minute,
                                                            seconds=now.second)
@@ -174,6 +204,7 @@ class hr_timesheet_sheet(osv.osv):
             sheet_lines = sheet_line_obj.browse(cr, uid, sheet_lines_ids, context=context)
             total_timesheet = {}
             for line in sheet_lines:
+                # Should this be coerced to the local day? line.date doesn't have time
                 day = line.date
                 if not total_timesheet.get(day, False):
                     total_timesheet[day] = timedelta(seconds=0)
@@ -281,7 +312,11 @@ class hr_timesheet_sheet(osv.osv):
             elif datetime.now() >= datetime.strptime(sheet.date_to, '%Y-%m-%d'):
                 self.write(cr, uid, [sheet.id], {'date_current': sheet.date_to,}, context=context)
             else:
-                self.write(cr, uid, [sheet.id], {'date_current': time.strftime('%Y-%m-%d')}, context=context)
+                self.write(cr, 
+                           uid, 
+                           [sheet.id], 
+                           {'date_current': fields.date.context_today(self,cr,uid,context=context)}, 
+                           context=context)
         return True
 
     def date_previous(self, cr, uid, ids, context=None):
@@ -314,7 +349,7 @@ class hr_timesheet_sheet(osv.osv):
 
     def check_sign(self, cr, uid, ids, typ, context=None):
         sheet = self.browse(cr, uid, ids, context=context)[0]
-        if not sheet.date_current == time.strftime('%Y-%m-%d'):
+        if not sheet.date_current == fields.date.context_today(self,cr,uid,context=context):
             raise osv.except_osv(_('Error !'), _('You cannot sign in/sign out from an other date than today'))
         return True
 
@@ -377,24 +412,26 @@ class hr_timesheet_sheet(osv.osv):
     def _default_date_from(self,cr, uid, context=None):
         user = self.pool.get('res.users').browse(cr, uid, uid, context=context)
         r = user.company_id and user.company_id.timesheet_range or 'month'
+        today = context_now(context)
         if r=='month':
-            return time.strftime('%Y-%m-01')
+            return today.strftime('%Y-%m-01')
         elif r=='week':
-            return (datetime.today() + relativedelta(weekday=0, days=-6)).strftime('%Y-%m-%d')
+            return (today + relativedelta(weekday=0, days=-6)).strftime('%Y-%m-%d')
         elif r=='year':
-            return time.strftime('%Y-01-01')
-        return time.strftime('%Y-%m-%d')
+            return today.strftime('%Y-01-01')
+        return today.strftime('%Y-%m-%d')
 
     def _default_date_to(self,cr, uid, context=None):
         user = self.pool.get('res.users').browse(cr, uid, uid, context=context)
         r = user.company_id and user.company_id.timesheet_range or 'month'
+        today = context_now(context)
         if r=='month':
-            return (datetime.today() + relativedelta(months=+1,day=1,days=-1)).strftime('%Y-%m-%d')
+            return (today + relativedelta(months=+1,day=1,days=-1)).strftime('%Y-%m-%d')
         elif r=='week':
-            return (datetime.today() + relativedelta(weekday=6)).strftime('%Y-%m-%d')
+            return (today + relativedelta(weekday=6)).strftime('%Y-%m-%d')
         elif r=='year':
-            return time.strftime('%Y-12-31')
-        return time.strftime('%Y-%m-%d')
+            return today.strftime('%Y-12-31')
+        return today.strftime('%Y-%m-%d')
 
     def _default_employee(self, cr, uid, context=None):
         emp_ids = self.pool.get('hr.employee').search(cr, uid, [('user_id','=',uid)], context=context)
@@ -402,7 +439,7 @@ class hr_timesheet_sheet(osv.osv):
 
     _defaults = {
         'date_from' : _default_date_from,
-        'date_current' : lambda *a: time.strftime('%Y-%m-%d'),
+        'date_current' : lambda self, cr, uid, c: c.get('date', fields.date.context_today(self,cr,uid,context=c)),
         'date_to' : _default_date_to,
         'state': 'new',
         'employee_id': _default_employee,
@@ -474,7 +511,7 @@ class hr_timesheet_line(osv.osv):
             context = {}
         if 'date' in context:
             return context['date']
-        return time.strftime('%Y-%m-%d')
+        return context_now(context).strftime('%Y-%m-%d')
 
     def _sheet(self, cursor, user, ids, name, args, context=None):
         sheet_obj = self.pool.get('hr_timesheet_sheet.sheet')
@@ -557,8 +594,8 @@ class hr_attendance(osv.osv):
         if context is None:
             context = {}
         if 'name' in context:
-            return context['name'] + time.strftime(' %H:%M:%S')
-        return time.strftime('%Y-%m-%d %H:%M:%S')
+            return context['name'] + context_now(context).strftime(' %H:%M:%S')
+        return context_now(context).strftime('%Y-%m-%d %H:%M:%S')
 
     def _get_hr_timesheet_sheet(self, cr, uid, ids, context=None):
         attendance_ids = []
@@ -583,9 +620,17 @@ class hr_attendance(osv.osv):
         sheet_obj = self.pool.get('hr_timesheet_sheet.sheet')
         res = {}.fromkeys(ids, False)
         for attendance in self.browse(cursor, user, ids, context=context):
-            date_to = datetime.strftime(datetime.strptime(attendance.name[0:10], '%Y-%m-%d'), '%Y-%m-%d %H:%M:%S')
+            _attendance_name = fields.date.context_today(self,
+                                                         cursor,
+                                                         user,
+                                                         context=context,
+                                                         timestamp=datetime.strptime(attendance.name,
+                                                                                     '%Y-%m-%d %H:%M:%S'))
+            # kind of hacky. Need a function like context_today which returns a datetime
+            date_to = datetime.strftime(datetime.strptime(_attendance_name,'%Y-%m-%d'),
+                                        '%Y-%m-%d %H:%M:%S')
             sheet_ids = sheet_obj.search(cursor, user,
-                [('date_to', '>=', date_to), ('date_from', '<=', attendance.name),
+                [('date_to', '>=', date_to), ('date_from', '<=', _attendance_name),
                  ('employee_id', '=', attendance.employee_id.id)],
                 context=context)
             if sheet_ids:
