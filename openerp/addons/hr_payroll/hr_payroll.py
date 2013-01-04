@@ -25,6 +25,7 @@ from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from dateutil import relativedelta
+import logging
 
 import netsvc
 from osv import fields, osv
@@ -33,6 +34,8 @@ from tools.translate import _
 import decimal_precision as dp
 
 from tools.safe_eval import safe_eval as eval
+
+_logger = logging.getLogger(__name__)
 
 class hr_payroll_structure(osv.osv):
     """
@@ -378,6 +381,7 @@ class hr_payslip(osv.osv):
         clause_3 = [('date_start','<=', date_from),'|',('date_end', '=', False),('date_end','>=', date_to)]
         clause_final =  [('employee_id', '=', employee.id),'|','|'] + clause_1 + clause_2 + clause_3
         contract_ids = contract_obj.search(cr, uid, clause_final, context=context)
+        _logger.debug('a:contract_ids: {0}'.format(contract_ids))
         return contract_ids
 
     def compute_sheet(self, cr, uid, ids, context=None):
@@ -632,6 +636,7 @@ class hr_payslip(osv.osv):
         worked_days_obj = self.pool.get('hr.payslip.worked_days')
         input_obj = self.pool.get('hr.payslip.input')
 
+        _logger.debug('b:contract_id: {0}'.format(contract_id))
         if context is None:
             context = {}
         #delete old worked days lines
@@ -657,6 +662,9 @@ class hr_payslip(osv.osv):
                       }
             }
         if (not employee_id) or (not date_from) or (not date_to):
+            _logger.debug('c:employee_id: {0}'.format(employee_id))
+            _logger.debug('d:date_from: {0}'.format(date_from))
+            _logger.debug('e:date_to: {0}'.format(date_to))
             return res
         ttyme = datetime.fromtimestamp(time.mktime(time.strptime(date_from, "%Y-%m-%d")))
         employee_id = empolyee_obj.browse(cr, uid, employee_id, context=context)
@@ -668,6 +676,7 @@ class hr_payslip(osv.osv):
         if not context.get('contract', False):
             #fill with the first contract of the employee
             contract_ids = self.get_contract(cr, uid, employee_id, date_from, date_to, context=context)
+            _logger.debug('f:contract_ids: {0}'.format(contract_ids))
             res['value'].update({
                         'struct_id': contract_ids and contract_obj.read(cr, uid, contract_ids[0], ['struct_id'], context=context)['struct_id'][0] or False,
                         'contract_id': contract_ids and contract_ids[0] or False,
@@ -676,6 +685,7 @@ class hr_payslip(osv.osv):
             if contract_id:
                 #set the list of contract for which the input have to be filled
                 contract_ids = [contract_id]
+                _logger.debug('g:contract_ids: {0}'.format(contract_ids))
                 #fill the structure with the one on the selected contract
                 contract_record = contract_obj.browse(cr, uid, contract_id, context=context)
                 res['value'].update({
@@ -685,6 +695,7 @@ class hr_payslip(osv.osv):
             else:
                 #if we don't give the contract, then the input to fill should be for all current contracts of the employee
                 contract_ids = self.get_contract(cr, uid, employee_id, date_from, date_to, context=context)
+                _logger.debug('h:contract_ids: {0}'.format(contract_ids))
                 if not contract_ids:
                     return res
 
@@ -706,6 +717,7 @@ class hr_payslip(osv.osv):
                  'name': '',
                  }
               }
+        _logger.debug('i:contract_id: {0}'.format(contract_id))
         context.update({'contract': True})
         if not contract_id:
             res['value'].update({'struct_id': False})

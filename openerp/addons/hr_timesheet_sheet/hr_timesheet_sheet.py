@@ -43,6 +43,7 @@ def context_now(context):
        :rtype: datetime
         """
     now = datetime.now()
+    _logger.debug('now: {0}'.format(now))
     context_now = None
     if context and context.get('tz'):
         try:
@@ -50,6 +51,7 @@ def context_now(context):
             context_tz = pytz.timezone(context['tz'])
             utc_now = utc.localize(now, is_dst=False) # UTC = no DST
             context_now = utc_now.astimezone(context_tz)
+            _logger.debug('context_now: {0}'.format(context_now))
         except Exception:
             _logger.debug("failed to compute context/client-specific today date, "
                           "using the UTC value for `today`",
@@ -159,14 +161,22 @@ class hr_timesheet_sheet(osv.osv):
             total_attendance = {}
             for attendance in [att for att in attendances
                                if att.action in ('sign_in', 'sign_out')]:
-                day = fields.date.context_today(self, cr, uid, context=context)
+                # Want local day
+                day = fields.datetime.context_timestamp(cr, 
+                                                        uid, 
+                                                        datetime.strptime(attendance.name, '%Y-%m-%d %H:%M:%S'), 
+                                                        context=context).date().isoformat()
+                _logger.debug('day: {0}'.format(day))
+                _logger.debug('total_attendance.get(day, False): {0}'.format(total_attendance.get(day, False)))
                 if not total_attendance.get(day, False):
                     total_attendance[day] = timedelta(seconds=0)
 
                 attendance_in_time = datetime.strptime(attendance.name, '%Y-%m-%d %H:%M:%S')
+                _logger.debug('attendance_in_time: {0}'.format(attendance_in_time))
                 attendance_interval = timedelta(hours=attendance_in_time.hour,
                                                 minutes=attendance_in_time.minute,
                                                 seconds=attendance_in_time.second)
+                _logger.debug('attendance_interval: {0}'.format(attendance_interval))
                 if attendance.action == 'sign_in':
                     total_attendance[day] -= attendance_interval
                 else:
@@ -175,7 +185,9 @@ class hr_timesheet_sheet(osv.osv):
                 # if the delta is negative, it means that a sign out is missing
                 # in a such case, we want to have the time to the end of the day
                 # for a past date, and the time to now for the current date
+                _logger.debug('total_attendance[day]: {0}'.format(total_attendance[day]))
                 if total_attendance[day] < timedelta(0):
+                    _logger.debug('total_attendance[day] < timedelta(0)')
                     if day == date_current:
                         now = context_now(context)
                         total_attendance[day] += timedelta(hours=now.hour,
@@ -244,6 +256,7 @@ class hr_timesheet_sheet(osv.osv):
             total_attendances_sheet = all_attendances_sheet['total_per_day']
             total_attendances_all_days = sum_all_days(total_attendances_sheet)
             total_attendances_day = total_attendances_sheet.get(date_current, timedelta(seconds=0))
+            _logger.debug('total_attendances_day: {0}'.format(total_attendances_day))
 
             total_timesheets_sheet = all_timesheet_lines[id]
             total_timesheets_all_days = sum_all_days(total_timesheets_sheet)
@@ -307,6 +320,8 @@ class hr_timesheet_sheet(osv.osv):
 
     def date_today(self, cr, uid, ids, context=None):
         for sheet in self.browse(cr, uid, ids, context=context):
+            _logger.debug('datetime.today(): {0}'.format(datetime.today()))
+            _logger.debug('datetime.now(): {0}'.format(datetime.now()))
             if datetime.today() <= datetime.strptime(sheet.date_from, '%Y-%m-%d'):
                 self.write(cr, uid, [sheet.id], {'date_current': sheet.date_from,}, context=context)
             elif datetime.now() >= datetime.strptime(sheet.date_to, '%Y-%m-%d'):

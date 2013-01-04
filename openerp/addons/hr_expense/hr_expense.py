@@ -20,11 +20,14 @@
 ##############################################################################
 
 import time
+import logging
 
 from osv import fields, osv
 from tools.translate import _
 import decimal_precision as dp
 import netsvc
+
+_logger = logging.getLogger(__name__)
 
 def _employee_get(obj, cr, uid, context=None):
     if context is None:
@@ -168,7 +171,8 @@ class hr_expense_expense(osv.osv):
                         acc = l.product_id.categ_id.property_account_expense_categ
                     tax_id = [x.id for x in l.product_id.supplier_taxes_id]
                 else:
-                    acc = property_obj.get(cr, uid, 'property_account_expense_categ', 'product.category', context={'force_company': company_id})
+                    acc = property_obj.get(cr, uid, 'property_account_expense_categ', 'product.category', res_id='product.category,2',context={'force_company': company_id})
+                    _logger.debug('acc: {0}'.format(acc))
                     if not acc:
                         raise osv.except_osv(_('Error !'), _('Please configure Default Expense account for Product purchase, `property_account_expense_categ`'))
                 lines.append((0, False, {

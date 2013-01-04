@@ -18,10 +18,13 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.     
 #
 ##############################################################################
+import logging
 
 from osv import osv,fields
 from tools.misc import attrgetter
 import time
+
+_logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------------
 # Properties
@@ -160,7 +163,9 @@ class ir_property(osv.osv):
         domain = self._get_domain(cr, uid, name, model, context=context)
         if domain is not None:
             domain = [('res_id', '=', res_id)] + domain
+            _logger.debug('domain: {0}'.format(domain))
             nid = self.search(cr, uid, domain, context=context)
+            _logger.debug('nid: {0}'.format(nid))
             if not nid: return False
             record = self.browse(cr, uid, nid[0], context=context)
             return self.get_by_record(cr, uid, record, context=context)

@@ -20,11 +20,14 @@
 ##############################################################################
 
 import math
+import logging
+import pdb
 
 from osv import fields,osv
 import tools
 import pooler
 from tools.translate import _
+_logger = logging.getLogger(__name__)
 
 class res_payterm(osv.osv):
     _description = 'Payment term'
@@ -154,6 +157,7 @@ class res_partner(osv.osv):
         'color': fields.integer('Color Index'),
     }
     def _default_category(self, cr, uid, context=None):
+        _logger.debug('_default_category')
         if context is None:
             context = {}
         if 'category_id' in context and context['category_id']:
@@ -169,6 +173,7 @@ class res_partner(osv.osv):
     }
 
     def copy(self, cr, uid, id, default=None, context=None):
+        _logger.debug('copy')
         if default is None:
             default = {}
         name = self.read(cr, uid, [id], ['name'], context)[0]['name']
@@ -179,6 +184,7 @@ class res_partner(osv.osv):
         return True
 
     def _check_ean_key(self, cr, uid, ids, context=None):
+        _logger.debug('_check_ean_key')
         for partner_o in pooler.get_pool(cr.dbname).get('res.partner').read(cr, uid, ids, ['ean13',]):
             thisean=partner_o['ean13']
             if thisean and thisean!='':
@@ -197,19 +203,26 @@ class res_partner(osv.osv):
 #   _constraints = [(_check_ean_key, 'Error: Invalid ean code', ['ean13'])]
 
     def name_get(self, cr, uid, ids, context=None):
+        _logger.debug('name_get')
         if context is None:
             context = {}
         if not len(ids):
+            #pdb.set_trace()
+            _logger.debug('len(ids) zero')
             return []
         if context.get('show_ref'):
             rec_name = 'ref'
         else:
             rec_name = 'name'
 
+        _logger.debug('ids: {0}'.format(ids))
+        _logger.debug('rec_name: {0}'.format(rec_name))
         res = [(r['id'], r[rec_name]) for r in self.read(cr, uid, ids, [rec_name], context)]
+        _logger.debug('res: {0}'.format(res))
         return res
 
     def name_search(self, cr, uid, name, args=None, operator='ilike', context=None, limit=100):
+        _logger.debug('name_search')
         if not args:
             args = []
         # short-circuit ref match when possible
@@ -220,6 +233,7 @@ class res_partner(osv.osv):
         return super(res_partner,self).name_search(cr, uid, name, args, operator=operator, context=context, limit=limit)
 
     def _email_send(self, cr, uid, ids, email_from, subject, body, on_error=None):
+        _logger.debug('_email_send')
         partners = self.browse(cr, uid, ids)
         for partner in partners:
             if len(partner.address):
@@ -228,6 +242,7 @@ class res_partner(osv.osv):
         return True
 
     def email_send(self, cr, uid, ids, email_from, subject, body, on_error=''):
+        _logger.debug('email_send')
         while len(ids):
             self.pool.get('ir.cron').create(cr, uid, {
                 'name': 'Send Partner Emails',
@@ -241,6 +256,7 @@ class res_partner(osv.osv):
         return True
 
     def address_get(self, cr, uid, ids, adr_pref=None):
+        _logger.debug('address_get')
         if adr_pref is None:
             adr_pref = ['default']
         address_obj = self.pool.get('res.partner.address')
@@ -260,6 +276,7 @@ class res_partner(osv.osv):
         return result
 
     def gen_next_ref(self, cr, uid, ids):
+        _logger.debug('gen_next_ref')
         if len(ids) != 1:
             return True
 
@@ -277,6 +294,7 @@ class res_partner(osv.osv):
         return True
 
     def view_header_get(self, cr, uid, view_id, view_type, context):
+        _logger.debug('view_header_get')
         res = super(res_partner, self).view_header_get(cr, uid, view_id, view_type, context)
         if res: return res
         if (not context.get('category_id', False)):
@@ -285,6 +303,7 @@ class res_partner(osv.osv):
     def main_partner(self, cr, uid):
         ''' Return the id of the main partner
         '''
+        _logger.debug('main_partner')
         model_data = self.pool.get('ir.model.data')
         return model_data.browse(
             cr, uid,
