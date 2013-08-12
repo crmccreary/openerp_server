@@ -183,22 +183,9 @@ class account_analytic_line(osv.osv):
                         details.append(line['name'])
                     return details
                 note = []
-                if move_line_id:
-                    line = account_analytic_line_obj.copy_data(cr, uid, account_analytic_line_id, context2)
-                    details = make_note(line)
-                    note.append(u' - '.join(map(lambda x: unicode(x) or '',details)))
-                else:
-                    #
-                    # Compute for lines
-                    #
-                    cr.execute("SELECT * FROM account_analytic_line WHERE account_id = %s and id IN %s AND product_id=%s and to_invoice=%s ORDER BY account_analytic_line.date", (account.id, tuple(ids), product_id, factor_id))
-    
-                    line_ids = cr.dictfetchall()
-                    for line in line_ids:
-                        # set invoice_line_note
-                        details = make_note(line)
-                        note.append(u' - '.join(map(lambda x: unicode(x) or '',details)))
-
+                line = account_analytic_line_obj.copy_data(cr, uid, account_analytic_line_id, context2)
+                details = make_note(line)
+                note.append(u' - '.join(map(lambda x: unicode(x) or '',details)))
                 curr_line['note'] = "\n".join(map(lambda x: unicode(x) or '',note))
                 invoice_line_obj.create(cr, uid, curr_line, context=context)
                 cr.execute("update account_analytic_line set invoice_id=%s WHERE account_id = %s and id IN %s", (last_invoice, account.id, tuple(ids)))
