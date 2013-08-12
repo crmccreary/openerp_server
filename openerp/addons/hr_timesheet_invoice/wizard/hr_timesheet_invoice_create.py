@@ -20,14 +20,18 @@
 ##############################################################################
 
 import time
+import logging
 
 from osv import osv, fields
 from tools.translate import _
+
+_logger = logging.getLogger(__name__)
 
 ## Create an invoice based on selected timesheet lines
 #
 
 class account_analytic_line(osv.osv):
+    _name = "account.analytic.line"
     _inherit = "account.analytic.line"
 
     #
@@ -40,6 +44,7 @@ class account_analytic_line(osv.osv):
     # }
     def invoice_cost_create(self, cr, uid, ids, data={}, context=None):
         analytic_account_obj = self.pool.get('account.analytic.account')
+        account_analytic_line_obj = self.pool.get('account.analytic.line')
         res_partner_obj = self.pool.get('res.partner')
         account_payment_term_obj = self.pool.get('account.payment.term')
         invoice_obj = self.pool.get('account.invoice')
@@ -49,6 +54,8 @@ class account_analytic_line(osv.osv):
         fiscal_pos_obj = self.pool.get('account.fiscal.position')
         product_uom_obj = self.pool.get('product.uom')
         invoice_line_obj = self.pool.get('account.invoice.line')
+        move_line_obj = self.pool.get('account.move.line')
+        move_obj = self.pool.get('account.move')
         invoices = []
         if context is None:
             context = {}
@@ -96,13 +103,13 @@ class account_analytic_line(osv.osv):
 
             context2 = context.copy()
             context2['lang'] = partner.lang
-            cr.execute("SELECT product_id, to_invoice, sum(unit_amount), product_uom_id " \
+            cr.execute("SELECT product_id, to_invoice, sum(unit_amount), product_uom_id, move_id, id " \
                     "FROM account_analytic_line as line " \
                     "WHERE account_id = %s " \
                         "AND id IN %s AND to_invoice IS NOT NULL " \
-                    "GROUP BY product_id,to_invoice,product_uom_id", (account.id, tuple(ids),))
+                    "GROUP BY product_id,to_invoice,product_uom_id, move_id, id", (account.id, tuple(ids),))
 
-            for product_id, factor_id, qty, uom in cr.fetchall():
+            for product_id, factor_id, qty, uom, move_line_id, account_analytic_line_id in cr.fetchall():
                 product = product_obj.browse(cr, uid, product_id, context2)
                 if not product:
                     raise osv.except_osv(_('Error'), _('At least one line has no product !'))
@@ -124,6 +131,24 @@ class account_analytic_line(osv.osv):
                     price = pro_price_obj.price_get(cr,uid,[pl], data.get('product', False) or product_id, qty or 1.0, account.partner_id.id, context=ctx)[pl]
                 else:
                     price = 0.0
+                if move_line_id:
+                    # Get the price/unit
+                    _logger.debug('move_line_id:{0}'.format(move_line_id))
+                    move_line = move_line_obj.browse(cr, uid, move_line_id, context2)
+                    name = move_line.name
+                    _logger.debug('move_line.name:{0}'.format(move_line.name))
+                    _logger.debug('move_line.move_id:{0}'.format(move_line.move_id.id))
+                    _invoice_ids = invoice_obj.search(cr, uid, [('move_id', '=', move_line.move_id.id)])
+                    _invoice = invoice_obj.browse(cr, uid, _invoice_ids[0], context2)
+                    _logger.debug('_invoice.id:{0}'.format(_invoice.id))
+                    _invoice_line_ids = invoice_line_obj.search(cr, uid, [('invoice_id', '=', _invoice.id)])
+                    for _invoice_line_id in _invoice_line_ids:
+                        _invoice_line = invoice_line_obj.browse(cr, uid, _invoice_line_id, context2)
+                        _logger.debug('_invoice_line.id:{0}'.format(_invoice_line.id))
+                        _logger.debug('_invoice_line.name:{0}'.format(_invoice_line.name))
+                        if _invoice_line.name == name:
+                            _logger.debug('_invoice_line.price_unit:{0}'.format(_invoice_line.price_unit))
+                            price = _invoice_line.price_unit
 
                 taxes = product.taxes_id
                 tax = fiscal_pos_obj.map_tax(cr, uid, account.partner_id.property_account_position, taxes)
@@ -144,14 +169,7 @@ class account_analytic_line(osv.osv):
                     'account_analytic_id': account.id,
                 }
 
-                #
-                # Compute for lines
-                #
-                cr.execute("SELECT * FROM account_analytic_line WHERE account_id = %s and id IN %s AND product_id=%s and to_invoice=%s ORDER BY account_analytic_line.date", (account.id, tuple(ids), product_id, factor_id))
-
-                line_ids = cr.dictfetchall()
-                note = []
-                for line in line_ids:
+                def make_note(line):
                     # set invoice_line_note
                     details = []
                     if data.get('date', False):
@@ -163,7 +181,23 @@ class account_analytic_line(osv.osv):
                             details.append("%s" % (line['unit_amount'], ))
                     if data.get('name', False):
                         details.append(line['name'])
+                    return details
+                note = []
+                if move_line_id:
+                    line = account_analytic_line_obj.copy_data(cr, uid, account_analytic_line_id, context2)
+                    details = make_note(line)
                     note.append(u' - '.join(map(lambda x: unicode(x) or '',details)))
+                else:
+                    #
+                    # Compute for lines
+                    #
+                    cr.execute("SELECT * FROM account_analytic_line WHERE account_id = %s and id IN %s AND product_id=%s and to_invoice=%s ORDER BY account_analytic_line.date", (account.id, tuple(ids), product_id, factor_id))
+    
+                    line_ids = cr.dictfetchall()
+                    for line in line_ids:
+                        # set invoice_line_note
+                        details = make_note(line)
+                        note.append(u' - '.join(map(lambda x: unicode(x) or '',details)))
 
                 curr_line['note'] = "\n".join(map(lambda x: unicode(x) or '',note))
                 invoice_line_obj.create(cr, uid, curr_line, context=context)
