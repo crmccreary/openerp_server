@@ -103,13 +103,14 @@ class account_analytic_line(osv.osv):
 
             context2 = context.copy()
             context2['lang'] = partner.lang
-            cr.execute("SELECT product_id, to_invoice, sum(unit_amount), product_uom_id, move_id, id " \
+            cr.execute("SELECT date, product_id, to_invoice, sum(unit_amount), product_uom_id, move_id, id " \
                     "FROM account_analytic_line as line " \
                     "WHERE account_id = %s " \
                         "AND id IN %s AND to_invoice IS NOT NULL " \
-                    "GROUP BY product_id,to_invoice,product_uom_id, move_id, id", (account.id, tuple(ids),))
+                    "GROUP BY product_id,to_invoice,product_uom_id, move_id, id "\
+                    "ORDER BY date ASC", (account.id, tuple(ids),))
 
-            for product_id, factor_id, qty, uom, move_line_id, account_analytic_line_id in cr.fetchall():
+            for line_date, product_id, factor_id, qty, uom, move_line_id, account_analytic_line_id in cr.fetchall():
                 product = product_obj.browse(cr, uid, product_id, context2)
                 if not product:
                     raise osv.except_osv(_('Error'), _('At least one line has no product !'))
