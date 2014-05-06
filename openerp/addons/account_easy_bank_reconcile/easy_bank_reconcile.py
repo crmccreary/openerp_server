@@ -18,19 +18,19 @@
 #########################################################################
 
 import time
+import logging
 
 from osv import fields, osv
-import netsvc
 from tools.translate import _
 import decimal_precision as dp
 
+_logger = logging.getLogger(__name__)
+
 class account_easy_bank_reconcile(osv.osv):
-    logger = netsvc.Logger()
     _name = "account.easy.bank.reconcile"
 
     def populate_candidate_lines(self, cr, uid, context=None):
-        self.logger.notifyChannel('addons.'+self._name+'.view_init', netsvc.LOG_DEBUG,
-                                  'context:%s'%context)
+        _logger.debug('context:%s'%context)
         if context is None:
             context = {}
         # Populate account_easy_bank_reconcile_candidate_line with unreconciled moves
@@ -42,8 +42,7 @@ class account_easy_bank_reconcile(osv.osv):
             ids = journal_pool.search(cr, uid, [('type', '=', journal_type)])
             for _id in ids:
                 journal = journal_pool.browse(cr, uid, _id, context = context)
-                self.logger.notifyChannel('addons.'+self._name+'.view_init', netsvc.LOG_DEBUG,
-                                          'journal.default_credit_account_id:%s'%journal.default_credit_account_id.id)
+                _logger.debug('journal.default_credit_account_id:%s'%journal.default_credit_account_id.id)
                 '''
                 If this query f***s up and generates dupes, the following will list the originals and the dupes:
                 SELECT * 
@@ -73,13 +72,11 @@ class account_easy_bank_reconcile(osv.osv):
                              SELECT a.move_line_id FROM account_easy_bank_reconcile_candidate_line a
                              WHERE a.move_line_id = b.id AND reconcile_journal_id = %d)
                          AND b.account_id = %d''' % (journal.id,journal.default_credit_account_id.id)
-                self.logger.notifyChannel('addons.'+self._name+'.view_init', netsvc.LOG_DEBUG,
-                                          'sql:%s'%sql)
+                _logger.debug('sql:%s'%sql)
                 cr.execute(sql)
                 for record in cr.fetchall():
                     for val in record:
-                        self.logger.notifyChannel('addons.'+self._name+'.view_init', netsvc.LOG_DEBUG,
-                                                  'val:%s'%val)
+                        _logger.debug('val:%s'%val)
                     name_parts = [str(record[1]),
                                   str(record[2]),
                                   str(record[3] or '0.00'),
@@ -87,16 +84,13 @@ class account_easy_bank_reconcile(osv.osv):
                     values = {'move_line_id': record[0], 
                               'reconcile_journal_id':journal.id,
                               'name':' '.join(name_parts)}
-                    self.logger.notifyChannel('addons.'+self._name+'.view_init', netsvc.LOG_DEBUG,
-                                              'values:%s'%values)
+                    _logger.debug('values:%s'%values)
                     account_easy_bank_reconcile_candidate_line.create(cr, uid, values, context=context)
 
 
     def create(self, cr, uid, vals, context=None):
-        self.logger.notifyChannel('addons.'+self._name+'.create', netsvc.LOG_DEBUG,
-                                  'vals:%s'%vals)
-        self.logger.notifyChannel('addons.'+self._name+'.create', netsvc.LOG_DEBUG,
-                                  'context:%s'%context)
+        _logger.debug('vals:%s'%vals)
+        _logger.debug('context:%s'%context)
         seq = 0
         if 'line_ids' in vals:
             for line in vals['line_ids']:
@@ -108,10 +102,8 @@ class account_easy_bank_reconcile(osv.osv):
     def write(self, cr, uid, ids, vals, context=None):
         if context is None:
             context = {}
-        self.logger.notifyChannel('addons.'+self._name+'.write', netsvc.LOG_DEBUG,
-                                  'ids:%s'%ids)
-        self.logger.notifyChannel('addons.'+self._name+'.write', netsvc.LOG_DEBUG,
-                                  'vals:%s'%vals)
+        _logger.debug('ids:%s'%ids)
+        _logger.debug('vals:%s'%vals)
         res = super(account_easy_bank_reconcile, self).write(cr, uid, ids, vals, context=context)
         return res
 
@@ -148,18 +140,18 @@ class account_easy_bank_reconcile(osv.osv):
         for statement in statements:
             res[statement.id] = statement.balance_start
             msg = 'res[statement.id]:%s' % res[statement.id]
-            self.logger.notifyChannel(self._name+'._end_balance', netsvc.LOG_DEBUG, msg)
+            _logger.debug(msg)
             currency_id = statement.currency.id
             msg = 'statement.report_type:%s' % statement.report_type
-            self.logger.notifyChannel(self._name+'._end_balance', netsvc.LOG_DEBUG, msg)
+            _logger.debug(msg)
             meaning = 1.0
             if statement.report_type == 'liability':
                 meaning = -1.0
             for line in statement.line_ids:
                 msg = 'line.debit:%s' % line.debit
-                self.logger.notifyChannel(self._name+'._end_balance', netsvc.LOG_DEBUG, msg)
+                _logger.debug(msg)
                 msg = 'line.credit:%s' % line.credit
-                self.logger.notifyChannel(self._name+'._end_balance', netsvc.LOG_DEBUG, msg)
+                _logger.debug(msg)
                 if line.debit > 0:
                     res[statement.id] += res_currency_obj.compute(cursor,
                                                                   user, 
@@ -174,8 +166,10 @@ class account_easy_bank_reconcile(osv.osv):
                                                                   currency_id,
                                                                   line.credit, 
                                                                   context=context)*meaning
+                msg = 'Current res[statement.id]:%s' % res[statement.id]
+                _logger.debug(msg)
             msg = 'res[statement.id]:%s' % res[statement.id]
-            self.logger.notifyChannel(self._name+'._end_balance', netsvc.LOG_DEBUG, msg)
+            _logger.debug(msg)
         for r in res:
             res[r] = round(res[r], 2)
         return res
@@ -315,7 +309,7 @@ class account_easy_bank_reconcile(osv.osv):
 
     def button_dummy(self, cr, uid, ids, context=None):
         msg = 'context:%s' % context
-        self.logger.notifyChannel(self._name+'.button_dummy', netsvc.LOG_DEBUG, msg)
+        _logger.debug(msg)
         self.populate_candidate_lines(cr, uid, context)
         return self.write(cr, uid, ids, {}, context=context)
 
@@ -323,17 +317,12 @@ class account_easy_bank_reconcile(osv.osv):
         return st_number + '/' + str(st_line.sequence)
 
     def balance_check(self, cr, uid, st_id, journal_type='bank', context=None):
-        self.logger.notifyChannel('addons.'+self._name+'.balance_check', netsvc.LOG_DEBUG,
-                                  'st_id:%s'%st_id)
-        self.logger.notifyChannel('addons.'+self._name+'.balance_check', netsvc.LOG_DEBUG,
-                                  'journal_type:%s'%journal_type)
-        self.logger.notifyChannel('addons.'+self._name+'.balance_check', netsvc.LOG_DEBUG,
-                                  'context:%s'%context)
+        _logger.debug('st_id:%s'%st_id)
+        _logger.debug('journal_type:%s'%journal_type)
+        _logger.debug('context:%s'%context)
         st = self.browse(cr, uid, st_id, context=context)
-        self.logger.notifyChannel('addons.'+self._name+'.balance_check', netsvc.LOG_DEBUG,
-                                  'st.balance_end:%s'%st.balance_end)
-        self.logger.notifyChannel('addons.'+self._name+'.balance_check', netsvc.LOG_DEBUG,
-                                  'st.balance_end_real:%s'%st.balance_end_real)
+        _logger.debug('st.balance_end:%s'%st.balance_end)
+        _logger.debug('st.balance_end_real:%s'%st.balance_end_real)
         if not (abs((st.balance_end or 0.0) - st.balance_end_real) < 0.0001):
             raise osv.except_osv('Error !',
                     'The statement balance is incorrect !\nThe expected balance (%.2f) is different than the computed one. (%.2f)' % (st.balance_end_real, st.balance_end))
@@ -346,40 +335,29 @@ class account_easy_bank_reconcile(osv.osv):
         return state=='draft'
 
     def button_confirm_bank(self, cr, uid, ids, context=None):
-        self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                  'context: %s'%context)
-        self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                  'ids: %s'%ids)
+        _logger.debug('context: %s'%context)
+        _logger.debug('ids: %s'%ids)
         obj_seq = self.pool.get('ir.sequence')
         if context is None:
             context = {}
 
         for st in self.browse(cr, uid, ids, context=context):
             j_type = st.journal_id.type
-            self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                      'j_type: %s'%j_type)
-            self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                      'st.state: %s'%st.state)
+            _logger.debug('j_type: %s'%j_type)
+            _logger.debug('st.state: %s'%st.state)
             company_currency_id = st.journal_id.company_id.currency_id.id
             if not self.check_status_condition(cr, uid, st.state, journal_type=j_type):
-                self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                          'state != "draft"')
+                _logger.debug('state != "draft"')
                 continue
             else:
-                self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                          'state == "draft"')
+                _logger.debug('state == "draft"')
 
-            self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                      'Calling balance_check')
-            self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                      'st.id: %s'%st.id)
+            _logger.debug('Calling balance_check')
+            _logger.debug('st.id: %s'%st.id)
             self.balance_check(cr, uid, st.id, journal_type=j_type, context=context)
-            self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                      'balance_check ok')
-            self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                      'st.journal_id.default_credit_account_id:%s'%st.journal_id.default_credit_account_id)
-            self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,
-                                      'st.journal_id.default_debit_account_id:%s'%st.journal_id.default_debit_account_id)
+            _logger.debug('balance_check ok')
+            _logger.debug('st.journal_id.default_credit_account_id:%s'%st.journal_id.default_credit_account_id)
+            _logger.debug('st.journal_id.default_debit_account_id:%s'%st.journal_id.default_debit_account_id)
             if (not st.journal_id.default_credit_account_id) \
                     or (not st.journal_id.default_debit_account_id):
                 raise osv.except_osv('Configuration Error !',
@@ -402,10 +380,10 @@ class account_easy_bank_reconcile(osv.osv):
                 seq += 1
                 line = account_easy_bank_reconcile_line_pool.browse(cr, uid, line.id, context=context)
                 msg = 'line.candidate_move_line_id.id:%s' % line.candidate_move_line_id.id
-                self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,msg)
+                _logger.debug(msg)
                 candidate_line = account_easy_bank_reconcile_candidate_line_pool.browse(cr, uid, line.candidate_move_line_id.id, context=context)
                 msg = 'candidate_line.id:%s' % candidate_line.id
-                self.logger.notifyChannel('addons.'+self._name+'.button_confirm_bank', netsvc.LOG_DEBUG,msg)
+                _logger.debug(msg)
                 candidate_line.write({'state':'reconciled'})
                 line.write({'sequence':seq})
 
@@ -418,8 +396,7 @@ class account_easy_bank_reconcile(osv.osv):
         return self.write(cr, uid, done, {'state':'draft'}, context=context)
 
     def onchange_journal_id(self, cr, uid, statement_id, journal_id, context=None):
-        self.logger.notifyChannel('addons.'+self._name+'.onchange_journal_id', netsvc.LOG_DEBUG,
-                                  'context:%s'%context)
+        _logger.debug('context:%s'%context)
         if context is None:
             context = {}
         cr.execute('SELECT balance_end_real \
@@ -436,23 +413,23 @@ class account_easy_bank_reconcile(osv.osv):
 
     def unlink(self, cr, uid, ids, context=None):
         msg = 'ids:%s' % ids
-        self.logger.notifyChannel('addons.'+self._name+'.unlink', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         stat = self.read(cr, uid, ids, ['state'], context=context)
         unlink_ids = []
         for t in stat:
             msg = 't:%s' % t
-            self.logger.notifyChannel('addons.'+self._name+'.unlink', netsvc.LOG_DEBUG,msg)
+            _logger.debug(msg)
             if t['state'] in ('draft'):
                 unlink_ids.append(t['id'])
                 st = self.browse(cr, uid, t['id'], context=context)
                 msg = 'st:%s' % st
-                self.logger.notifyChannel('addons.'+self._name+'.unlink', netsvc.LOG_DEBUG,msg)
+                _logger.debug(msg)
                 msg = 'st.line_ids:%s' % st.line_ids
-                self.logger.notifyChannel('addons.'+self._name+'.unlink', netsvc.LOG_DEBUG,msg)
+                _logger.debug(msg)
                 # Reset all of the candidate lines to draft
                 for line in st.line_ids:
                     msg = 'line.candidate_move_line_id.id:%s' % line.candidate_move_line_id.id
-                    self.logger.notifyChannel('addons.'+self._name+'.unlink', netsvc.LOG_DEBUG,msg)
+                    _logger.debug(msg)
                     line.candidate_move_line_id.write({'state':'draft'})
             else:
                 raise osv.except_osv('Invalid action !', 'Cannot delete bank statement(s) which are already confirmed !')
@@ -461,7 +438,7 @@ class account_easy_bank_reconcile(osv.osv):
 
     def copy(self, cr, uid, id, default=None, context=None):
         msg = 'id:%s' % id
-        self.logger.notifyChannel('addons.'+self._name+'.copy', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         if default is None:
             default = {}
         if context is None:
@@ -472,19 +449,18 @@ class account_easy_bank_reconcile(osv.osv):
 account_easy_bank_reconcile()
 
 class account_easy_bank_reconcile_candidate_line(osv.osv):
-    logger = netsvc.Logger()
 
     def search(self, cr, user, args, offset=0, limit=None, order=None, context=None, count=False):
         msg = 'args:%s' % args
-        self.logger.notifyChannel(self._name+'.search', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         msg = 'offset:%s' % offset
-        self.logger.notifyChannel(self._name+'.search', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         msg = 'limit:%s' % limit
-        self.logger.notifyChannel(self._name+'.search', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         msg = 'order:%s' % order
-        self.logger.notifyChannel(self._name+'.search', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         msg = 'count:%s' % count
-        self.logger.notifyChannel(self._name+'.search', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         q = []
         for arg in args:
             if arg[0] == 'state':
@@ -501,11 +477,11 @@ class account_easy_bank_reconcile_candidate_line(osv.osv):
         if offset:
             sql = sql + ' OFFSET %d' % offset
         msg = 'sql:%s' % sql
-        self.logger.notifyChannel(self._name+'.search', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         cr.execute(sql)
         ids = [(r[0]) for r in cr.fetchall()]
         msg = 'ids:%s' % ids
-        self.logger.notifyChannel(self._name+'.search', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         return ids
 
     _name = "account.easy.bank.reconcile.candidate.line"
@@ -571,20 +547,14 @@ account_easy_bank_reconcile_candidate_line()
 
 class account_easy_bank_reconcile_line(osv.osv):
     _name = "account.easy.bank.reconcile.line"
-    logger = netsvc.Logger()
 
     def onchange_move_line_id(self, cr, uid, line_id, candidate_move_line_id, journal_id, account_id, context = None):
         res = {}
-        self.logger.notifyChannel('addons.'+self._name, netsvc.LOG_DEBUG,
-                                  'context: %s'%context)
-        self.logger.notifyChannel('addons.'+self._name, netsvc.LOG_DEBUG,
-                                  'line_id: %s'%line_id)
-        self.logger.notifyChannel('addons.'+self._name, netsvc.LOG_DEBUG,
-                                  'candidate_move_line_id: %s'%candidate_move_line_id)
-        self.logger.notifyChannel('addons.'+self._name, netsvc.LOG_DEBUG,
-                                  'journal_id: %s'%journal_id)
-        self.logger.notifyChannel('addons.'+self._name, netsvc.LOG_DEBUG,
-                                  'account_id: %s'%account_id)
+        _logger.debug('context: %s'%context)
+        _logger.debug('line_id: %s'%line_id)
+        _logger.debug('candidate_move_line_id: %s'%candidate_move_line_id)
+        _logger.debug('journal_id: %s'%journal_id)
+        _logger.debug('account_id: %s'%account_id)
 
         if not candidate_move_line_id:
             return {}
@@ -607,28 +577,26 @@ class account_easy_bank_reconcile_line(osv.osv):
 
     def post(self, cr, uid, ids, context=None):
         msg = 'ids:%s' % ids
-        self.logger.notifyChannel('addons.'+self._name+'.post', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         return True
 
     def unlink(self, cr, uid, ids, context=None):
         msg = 'ids:%s' % ids
-        self.logger.notifyChannel('addons.'+self._name+'.unlink', netsvc.LOG_DEBUG,msg)
+        _logger.debug(msg)
         # Mark candidate lines as pending
         #account_easy_bank_reconcile_candidate_line_pool = self.pool.get('account.easy.bank.reconcile.candidate.line')
         for id in ids:
             statement_line = self.browse(cr, uid, id, context=context)
             candidate_line = statement_line.candidate_move_line_id
             msg = 'candidate_line.id:%s' % candidate_line.id
-            self.logger.notifyChannel('addons.'+self._name+'.unlink', netsvc.LOG_DEBUG,msg)
+            _logger.debug(msg)
             candidate_line.write({'state':'draft'})
         osv.osv.unlink(self, cr, uid, ids, context=context)
         return True
 
     def button_validate(self, cursor, user, ids, context=None):
-        self.logger.notifyChannel('addons.'+self._name+'.button_validate', netsvc.LOG_DEBUG,
-                                  'context: %s'%context)
-        self.logger.notifyChannel('addons.'+self._name+'.button_validate', netsvc.LOG_DEBUG,
-                                  'ids: %s'%ids)
+        _logger.debug('context: %s'%context)
+        _logger.debug('ids: %s'%ids)
 
         return self.post(cursor, user, ids, context=context)
 

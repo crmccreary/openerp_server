@@ -1345,7 +1345,10 @@ openerp.web.form.Field = openerp.web.form.Widget.extend(/** @lends openerp.web.f
         this.value = undefined;
         view.fields[this.name] = this;
         view.fields_order.push(this.name);
-        this.type = node.attrs.widget || view.fields_view.fields[node.attrs.name].type;
+        if (view.fields_view.fields[node.attrs.name] == undefined)
+            this.type = 'string';
+        else
+            this.type = node.attrs.widget || view.fields_view.fields[node.attrs.name].type;
         this.element_name = "field_" + this.name + "_" + this.type;
 
         this._super(view, node);
